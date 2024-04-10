@@ -19,8 +19,7 @@ from google.cloud import storage
 #
 ###############################################################################################################
 
-
-VERBOSE = True  # This is a constance
+VERBOSE = True  # This is a constant
 webhooks = []
 bucket_name = "canonn-downloads"
 
@@ -35,7 +34,7 @@ bucket_name = "canonn-downloads"
 #  ╚═╝      ╚═════╝ ╚═╝  ╚═══╝ ╚═════╝   ╚═╝   ╚═╝ ╚═════╝ ╚═╝  ╚═══╝╚══════╝
 #
 ###############################################################################################################
-#
+
 
 """                                   __         __      __        __                  
     _________  ____  ____  ___  _____/ /_   ____/ /___ _/ /_____ _/ /_  ____ _________ 
@@ -132,6 +131,35 @@ def send_discord(message, verbosity=False):
         print(message)
 
 
+"""                  __                                        __
+   _________  __  __/ /____     ________  _________  _________/ /
+  / ___/ __ \/ / / / __/ _ \   / ___/ _ \/ ___/ __ \/ ___/ __  / 
+ / /  / /_/ / /_/ / /_/  __/  / /  /  __/ /__/ /_/ / /  / /_/ /  
+/_/   \____/\__,_/\__/\___/  /_/   \___/\___/\____/_/   \__,_/   
+                                                                 
+"""
+
+
+def route_record(row, priorentry):
+    system, x, y, z, entryid = row
+    if entryid != priorentry:
+        if priorentry is not None:
+            print("Upload batch")
+
+        print("Starting new batch")
+        print(f"{system},{x},{y},{z},{entryid}")
+
+
+"""                                                         __         
+    ____  _________  ________  __________   _________  ____/ /__  _  __
+   / __ \/ ___/ __ \/ ___/ _ \/ ___/ ___/  / ___/ __ \/ __  / _ \| |/_/
+  / /_/ / /  / /_/ / /__/  __(__  |__  )  / /__/ /_/ / /_/ /  __/>  <  
+ / .___/_/   \____/\___/\___/____/____/   \___/\____/\__,_/\___/_/|_|  
+/_/                                                                    
+
+"""
+
+
 def process_codex(db, store, webhooks, keywords):
     try:
         cursor = db.cursor()
@@ -147,21 +175,21 @@ def process_codex(db, store, webhooks, keywords):
             where cnr.english_name like '%%%s%%'
         """
 
+        prior_entry = None
+
         if keywords is not None:
             cursor.execute(sqltext_where, (keywords))
         else:
             cursor.execute(sqltext)
         while True:
-            print("batching")
             rows = cursor.fetchmany(1000)
             if not rows:
                 break
             # Processing the fetched rows
-
             for row in rows:
                 system, x, y, z, entryid = row
-                # Process the data as needed
-                print(f"{system},{x},{y},{z},{entryid}")
+                route_record(row, prior_entry)
+                prior_entry = entryid
 
         # Closing cursor and connection
         cursor.close()
