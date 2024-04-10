@@ -1,4 +1,4 @@
-# Drive Secrets
+# Storage Secrets
 
 To get a secrets file from Google, you typically need to follow these steps:
 

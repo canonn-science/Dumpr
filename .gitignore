@@ -161,4 +161,4 @@ cython_debug/
 
 database_secrets.json
 discord_secrets.json
-drive_secrets.json
+storage_secrets.json

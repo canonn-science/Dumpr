@@ -1,0 +1,235 @@
+#!/bin/env python3
+
+import argparse
+import json
+import pymysql
+from google.oauth2 import service_account
+from googleapiclient import discovery
+from google.cloud import storage
+
+
+###############################################################################################################
+#
+#  ██╗   ██╗ █████╗ ██████╗ ██╗ █████╗ ██████╗ ██╗     ███████╗███████╗
+#  ██║   ██║██╔══██╗██╔══██╗██║██╔══██╗██╔══██╗██║     ██╔════╝██╔════╝
+#  ██║   ██║███████║██████╔╝██║███████║██████╔╝██║     █████╗  ███████╗
+#  ╚██╗ ██╔╝██╔══██║██╔══██╗██║██╔══██║██╔══██╗██║     ██╔══╝  ╚════██║
+#   ╚████╔╝ ██║  ██║██║  ██║██║██║  ██║██████╔╝███████╗███████╗███████║
+#    ╚═══╝  ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝╚═╝  ╚═╝╚═════╝ ╚══════╝╚══════╝╚══════╝
+#
+###############################################################################################################
+
+
+VERBOSE = True  # This is a constance
+webhooks = []
+bucket_name = "canonn-downloads"
+
+
+###############################################################################################################
+#
+#  ███████╗██╗   ██╗███╗   ██╗ ██████╗████████╗██╗ ██████╗ ███╗   ██╗███████╗
+#  ██╔════╝██║   ██║████╗  ██║██╔════╝╚══██╔══╝██║██╔═══██╗████╗  ██║██╔════╝
+#  █████╗  ██║   ██║██╔██╗ ██║██║        ██║   ██║██║   ██║██╔██╗ ██║███████╗
+#  ██╔══╝  ██║   ██║██║╚██╗██║██║        ██║   ██║██║   ██║██║╚██╗██║╚════██║
+#  ██║     ╚██████╔╝██║ ╚████║╚██████╗   ██║   ██║╚██████╔╝██║ ╚████║███████║
+#  ╚═╝      ╚═════╝ ╚═╝  ╚═══╝ ╚═════╝   ╚═╝   ╚═╝ ╚═════╝ ╚═╝  ╚═══╝╚══════╝
+#
+###############################################################################################################
+#
+
+"""                                   __         __      __        __                  
+    _________  ____  ____  ___  _____/ /_   ____/ /___ _/ /_____ _/ /_  ____ _________ 
+   / ___/ __ \/ __ \/ __ \/ _ \/ ___/ __/  / __  / __ `/ __/ __ `/ __ \/ __ `/ ___/ _ \
+  / /__/ /_/ / / / / / / /  __/ /__/ /_   / /_/ / /_/ / /_/ /_/ / /_/ / /_/ (__  )  __/
+  \___/\____/_/ /_/_/ /_/\___/\___/\__/   \__,_/\__,_/\__/\__,_/_.___/\__,_/____/\___/  
+
+"""
+
+
+def connect_database(database_secrets_file):
+    global mysql_conn  # Declare `mysql_conn` as a global variable
+    print("Database Secrets File:", database_secrets_file)
+
+    # Open the JSON file containing database secrets
+    with open(database_secrets_file) as json_file:
+        secret = json.load(json_file)  # Load the JSON data into a dictionary
+
+        # Establish a connection to the MySQL database
+        mysql_conn = pymysql.connect(
+            host=secret.get("DB_HOST"),  # Get the host from secrets
+            user=secret.get("DB_USER"),  # Get the username from secrets
+            password=secret.get("DB_PASSWORD"),  # Get the password from secrets
+            db=secret.get("DB_NAME"),  # Get the database name from secrets
+            port=int(
+                secret.get("DB_PORT", 3306)
+            ),  # Get the port from secrets, default to 3306 if not provided
+            charset="utf8",  # Set the character set to UTF-8
+        )
+        return mysql_conn
+
+
+"""                                 __          __                            
+  _________  ____  ____  ___  _____/ /_   _____/ /_____  _________ _____ ____ 
+ / ___/ __ \/ __ \/ __ \/ _ \/ ___/ __/  / ___/ __/ __ \/ ___/ __ `/ __ `/ _ \
+/ /__/ /_/ / / / / / / /  __/ /__/ /_   (__  ) /_/ /_/ / /  / /_/ / /_/ /  __/
+\___/\____/_/ /_/_/ /_/\___/\___/\__/  /____/\__/\____/_/   \__,_/\__, /\___/ 
+                                                                 /____/       
+"""
+
+
+def connect_storage(storage_secrets_file):
+    global bucket_name
+    print("Storage Secrets File:", storage_secrets_file)
+    storage_secrets = service_account.Credentials.from_service_account_file(
+        storage_secrets_file
+    )
+    client = storage.Client(credentials=storage_secrets)
+    bucket = client.get_bucket(bucket_name)
+    return bucket
+
+
+"""
+    __                __                 __    __                __       
+   / /___  ____ _____/ /  _      _____  / /_  / /_  ____  ____  / /_______
+  / / __ \/ __ `/ __  /  | | /| / / _ \/ __ \/ __ \/ __ \/ __ \/ //_/ ___/
+ / / /_/ / /_/ / /_/ /   | |/ |/ /  __/ /_/ / / / / /_/ / /_/ / ,< (__  ) 
+/_/\____/\__,_/\__,_/    |__/|__/\___/_.___/_/ /_/\____/\____/_/|_/____/  
+
+"""
+
+
+def load_webhooks(discord_secrets_file):
+    print("Discord Secrets File:", discord_secrets_file)
+    try:
+        with open(discord_secrets_file, "r") as file:
+            webhooks = json.load(file)
+            return webhooks
+    except FileNotFoundError:
+        print("File not found.")
+        return []
+    except json.JSONDecodeError:
+        print("Error decoding JSON.")
+        return []
+
+
+"""                     __       ___                          __
+   ________  ____  ____/ /  ____/ (_)_____________  _________/ /
+  / ___/ _ \/ __ \/ __  /  / __  / / ___/ ___/ __ \/ ___/ __  / 
+ (__  )  __/ / / / /_/ /  / /_/ / (__  ) /__/ /_/ / /  / /_/ /  
+/____/\___/_/ /_/\__,_/   \__,_/_/____/\___/\____/_/   \__,_/   
+
+"""
+
+
+def send_discord(message, verbosity=False):
+    # loop through the webhooks and send discord messages
+    webhook = {
+        "verbose": True,
+        "url": "placeholder",
+    }  #  temporary until we write the actual functions
+    # only send verbose messages
+    if webhook.get("verbose") or not verbosity:
+        print(message)
+
+
+def process_codex(db, store, webhooks, keywords):
+    try:
+        cursor = db.cursor()
+        sqltext = """
+            select c.system,x,y,z,c.entryid from codex_systems c 
+            join codex_name_ref cnr on c.entryid = cnr.entryid
+            order by cnr.hud_category,c.entryid
+        """
+
+        sqltext_where = """
+            select c.system,x,y,z,c.entryid from codex_systems c
+            join codex_name_ref cnr on c.entryid = cnr.entryid
+            where cnr.english_name like '%%%s%%'
+        """
+
+        if keywords is not None:
+            cursor.execute(sqltext_where, (keywords))
+        else:
+            cursor.execute(sqltext)
+        while True:
+            print("batching")
+            rows = cursor.fetchmany(1000)
+            if not rows:
+                break
+            # Processing the fetched rows
+
+            for row in rows:
+                system, x, y, z, entryid = row
+                # Process the data as needed
+                print(f"{system},{x},{y},{z},{entryid}")
+
+        # Closing cursor and connection
+        cursor.close()
+        db.close()
+
+    except pymysql.Error as e:
+        print(f"Error: {e}")
+        send_discord("Dumpr query failed")
+
+
+###############################################################################################################
+#
+#  ███╗   ███╗ █████╗ ██╗███╗   ██╗
+#  ████╗ ████║██╔══██╗██║████╗  ██║
+#  ██╔████╔██║███████║██║██╔██╗ ██║
+#  ██║╚██╔╝██║██╔══██║██║██║╚██╗██║
+#  ██║ ╚═╝ ██║██║  ██║██║██║ ╚████║
+#  ╚═╝     ╚═╝╚═╝  ╚═╝╚═╝╚═╝  ╚═══╝
+#
+###############################################################################################################
+
+
+def main(
+    entryid=None,
+    storage_secrets_file=None,
+    database_secrets_file=None,
+    discord_secrets_file=None,
+    codex_keywords=None,
+):
+    global webhooks
+    send_discord("Starting dumpr")
+    db = connect_database(database_secrets_file)
+    store = connect_storage(storage_secrets_file)
+    webhooks = load_webhooks(discord_secrets_file)
+    process_codex(db, store, webhooks, codex_keywords)
+
+    print("Codex Keywords:", codex_keywords)
+    send_discord("Successful Dumpr")
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Process optional parameters.")
+    parser.add_argument("-e", "--entryid", help="Entry ID", default=None)
+    parser.add_argument(
+        "-s",
+        "--storage_secrets",
+        help="Storage Secrets File",
+        default="storage_secrets.json",
+    )
+    parser.add_argument(
+        "-d",
+        "--database_secrets",
+        help="Database Secrets File",
+        default="database_secrets.json",
+    )
+    parser.add_argument(
+        "-w",
+        "--discord_secrets",
+        help="Discord Secrets File",
+        default="discord_secrets.json",
+    )
+    parser.add_argument("-c", "--codex_keywords", help="Codex Keywords", default=None)
+    args = parser.parse_args()
+
+    main(
+        args.entryid,
+        args.storage_secrets,
+        args.database_secrets,
+        args.discord_secrets,
+        args.codex_keywords,
+    )
