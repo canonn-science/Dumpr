@@ -7,7 +7,7 @@ from google.oauth2 import service_account
 from googleapiclient import discovery
 from google.cloud import storage
 import os
-
+import requests
 
 ###############################################################################################################
 #
@@ -21,10 +21,9 @@ import os
 ###############################################################################################################
 
 VERBOSE = True  # This is a constant
-webhooks = []
-bucket_name = "canonn-downloads"
-file = None
-store = None
+webhooks = []  # placeholder for webhooks
+bucket_name = "canonn-downloads"  # should probably use a config file for this
+store = None  # place holder for the storage location.
 
 
 ###############################################################################################################
@@ -39,6 +38,8 @@ store = None
 ###############################################################################################################
 
 
+# this is a helper class
+# Instead of using variable.get("key") or get["key"] you can just user variable.key
 class RowObject:
     def __init__(self, **kwargs):
         for key, value in kwargs.items():
@@ -95,12 +96,16 @@ def connect_database(database_secrets_file):
 / /__/ /_/ / / / / / / /  __/ /__/ /_   (__  ) /_/ /_/ / /  / /_/ / /_/ /  __/
 \___/\____/_/ /_/_/ /_/\___/\___/\__/  /____/\__/\____/_/   \__,_/\__, /\___/ 
                                                                  /____/       
+
+
+This fetches the bucket object so that it can be used to store files on the google drive
+
 """
 
 
 def connect_storage(storage_secrets_file):
     global bucket_name
-    print("Storage Secrets File:", storage_secrets_file)
+
     storage_secrets = service_account.Credentials.from_service_account_file(
         storage_secrets_file
     )
@@ -115,6 +120,10 @@ def connect_storage(storage_secrets_file):
   / / __ \/ __ `/ __  /  | | /| / / _ \/ __ \/ __ \/ __ \/ __ \/ //_/ ___/
  / / /_/ / /_/ / /_/ /   | |/ |/ /  __/ /_/ / / / / /_/ / /_/ / ,< (__  ) 
 /_/\____/\__,_/\__,_/    |__/|__/\___/_.___/_/ /_/\____/\____/_/|_/____/  
+
+
+This function will load the discord_secrets file so that we can use it 
+to send messages to one or more webhooks
 
 """
 
@@ -143,55 +152,77 @@ def load_webhooks(discord_secrets_file):
 
 
 def send_discord(message, verbosity=False):
+    global webhooks
+
+    payload = {}
+    payload["content"] = message
+
     # loop through the webhooks and send discord messages
-    webhook = {
-        "verbose": True,
-        "url": "placeholder",
-    }  #  temporary until we write the actual functions
-    # only send verbose messages
-    if webhook.get("verbose") or not verbosity:
-        print(message)
-
-
-"""                  __                                        __
-   _________  __  __/ /____     ________  _________  _________/ /
-  / ___/ __ \/ / / / __/ _ \   / ___/ _ \/ ___/ __ \/ ___/ __  / 
- / /  / /_/ / /_/ / /_/  __/  / /  /  __/ /__/ /_/ / /  / /_/ /  
-/_/   \____/\__,_/\__/\___/  /_/   \___/\___/\____/_/   \__,_/   
-                                                                 
-"""
-
-
-def route_record(row, priorentry):
-    global file
-    print(f"{row.entryid} {priorentry}")
-    # If we have a new entry
-    if row.entryid != priorentry:
-        # we did not have an open file at this point
-        if priorentry is not None:
-            file.close()
-        print("close previous file handle")
-        print("Upload previous batch")
-
-        print(f"Starting new batch {row.hud_category}/{row.entryid}")
-        file = open(os.path.join("dumps", f"{row.entryid}.csv"), "w")
-    file.write(f"{row.system},{row.x},{row.y},{row.z},{row.entryid}\n")
+    for webhook in webhooks:
+        # only send verbose messages
+        if webhook.get("verbose") or verbosity:
+            r = requests.post(
+                webhook.get("webhook"),
+                data=json.dumps(payload),
+                headers={"Content-Type": "application/json"},
+            )
+            print(message)
 
 
 """
-    _______       _      __  
-   / ____(_)___  (_)____/ /_ 
-  / /_  / / __ \/ / ___/ __ \
- / __/ / / / / / (__  ) / / /
-/_/   /_/_/ /_/_/____/_/ /_/ 
+               __                __              __            
+  __  ______  / /___  ____ _____/ /  ___  ____  / /________  __
+ / / / / __ \/ / __ \/ __ `/ __  /  / _ \/ __ \/ __/ ___/ / / /
+/ /_/ / /_/ / / /_/ / /_/ / /_/ /  /  __/ / / / /_/ /  / /_/ / 
+\__,_/ .___/_/\____/\__,_/\__,_/   \___/_/ /_/\__/_/   \__, /  
+    /_/                                               /____/  
 
-
+This uploads a file to google cloud storage and makes it publicly accessible
+    
 """
 
 
-def finish(row):
-    file.close()
-    send_discord("Dumpr complete")
+def upload_entry(cnr):
+    global store
+
+    """Uploads a file to Google Cloud Storage."""
+    blob = store.blob(f"dumpr/{cnr.hud_category}/{cnr.entryid}.csv")
+    # Upload the file
+    blob.upload_from_filename(os.path.join("dumps", f"{cnr.entryid}.csv"))
+    blob.make_public()
+    send_discord(
+        f"Uploaded {cnr.english_name} [{cnr.entryid}.csv](<https://storage.googleapis.com/canonn-downloads/dumpr/{cnr.hud_category}/{cnr.entryid}.csv>)"
+    )
+
+
+"""
+      ____ ____  / /_   _________  ____/ /__  _  __   / (_)____/ /_
+     / __ `/ _ \/ __/  / ___/ __ \/ __  / _ \| |/_/  / / / ___/ __/
+    / /_/ /  __/ /_   / /__/ /_/ / /_/ /  __/>  <   / / (__  ) /_  
+    \__, /\___/\__/   \___/\____/\__,_/\___/_/|_|  /_/_/____/\__/  
+   /____/                                                          
+
+This function will get a sorted list of codex entries from the database so they can be used
+later to fetch each codex item. The sorted list means we don't need to sort the 
+bigger table (codex_systems) and this speeds up the whole process and reduces the strain
+on the database.
+   
+"""
+
+
+def get_codex_list(db, store, webhooks, keywords):
+    cursor = db.cursor()
+    where = ""
+    if keywords is not None:
+        where = "where english_name like %s"
+    sqltext = f"select entryid,hud_category,english_name from codex_name_ref cnr {where} order by hud_category,entryid"
+    if keywords is not None:
+        cursor.execute(sqltext, ("%" + keywords + "%"))
+    else:
+        cursor.execute(sqltext)
+    rows = cursor.fetchall()
+    cursor.close()
+    return rows
 
 
 """                                                         __         
@@ -204,27 +235,19 @@ def finish(row):
 """
 
 
-def process_codex(db, store, webhooks, keywords):
+def process_codex(db, entry):
+    cnr = RowObject(**entry)
+    rowcount = 0
     try:
         cursor = db.cursor()
         sqltext = """
-            select c.system,x,y,z,c.entryid,cnr.hud_category from codex_systems c 
-            join codex_name_ref cnr on c.entryid = cnr.entryid
-            order by cnr.hud_category,c.entryid
+            select c.system,x,y,z from codex_systems c 
+            where entryid = %s
         """
+        cursor.execute(sqltext, (cnr.entryid))
 
-        sqltext_where = """
-            select c.system,x,y,z,c.entryid,cnr.hud_category from codex_systems c
-            join codex_name_ref cnr on c.entryid = cnr.entryid
-            where cnr.english_name like %s order by cnr.hud_category,c.entryid
-        """
+        file = open(os.path.join("dumps", f"{cnr.entryid}.csv"), "w")
 
-        prior_entry = None
-
-        if keywords is not None:
-            cursor.execute(sqltext_where, ("%" + keywords + "%"))
-        else:
-            cursor.execute(sqltext)
         while True:
             rows = cursor.fetchmany(1000)
             if not rows:
@@ -232,17 +255,21 @@ def process_codex(db, store, webhooks, keywords):
             # Processing the fetched rows
             for row_dict in rows:
                 row = RowObject(**row_dict)
-                route_record(row, prior_entry)
-                prior_entry = row.entryid
-            # finish processeing and upload the final dump
-        finish(row)
+                rowcount += 1
+                file.write(f"{row.system},{row.x},{row.y},{row.z},{cnr.entryid}\n")
+
         # Closing cursor and connection
         cursor.close()
-        db.close()
+        file.close()
+
+        if rowcount > 0:
+            upload_entry(cnr)
+        else:
+            send_discord(f"No data found for  {cnr.english_name} ({cnr.entryid})")
 
     except pymysql.Error as e:
         print(f"Error: {e}")
-        send_discord("Dumpr query failed")
+        send_discord(f"Dumpr query failed {cnr.english_name}", VERBOSE)
 
 
 ###############################################################################################################
@@ -266,13 +293,21 @@ def main(
     global webhooks
     global store
 
-    send_discord("Starting dumpr")
+    webhooks = load_webhooks(discord_secrets_file)
+    send_discord(
+        f"Starting [Dumpr](<https://github.com/canonn-science/Dumpr/blob/main/README.md>)",
+        VERBOSE,
+    )
     print("Codex Keywords:", codex_keywords)
     db = connect_database(database_secrets_file)
     store = connect_storage(storage_secrets_file)
-    webhooks = load_webhooks(discord_secrets_file)
-    process_codex(db, store, webhooks, codex_keywords)
-    send_discord("Successful Dumpr")
+
+    # Getting a sorted list of codex entries
+    entries = get_codex_list(db, store, webhooks, codex_keywords)
+    for entry in entries:
+        process_codex(db, entry)
+
+    send_discord("Successful Dumpr", VERBOSE)
 
 
 if __name__ == "__main__":
