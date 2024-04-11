@@ -6,6 +6,7 @@ import pymysql
 from google.oauth2 import service_account
 from googleapiclient import discovery
 from google.cloud import storage
+import os
 
 
 ###############################################################################################################
@@ -22,6 +23,26 @@ from google.cloud import storage
 VERBOSE = True  # This is a constant
 webhooks = []
 bucket_name = "canonn-downloads"
+file = None
+store = None
+
+
+###############################################################################################################
+#
+#    ██████╗██╗      █████╗ ███████╗███████╗███████╗███████╗
+#   ██╔════╝██║     ██╔══██╗██╔════╝██╔════╝██╔════╝██╔════╝
+#   ██║     ██║     ███████║███████╗███████╗█████╗  ███████╗
+#   ██║     ██║     ██╔══██║╚════██║╚════██║██╔══╝  ╚════██║
+#   ╚██████╗███████╗██║  ██║███████║███████║███████╗███████║
+#    ╚═════╝╚══════╝╚═╝  ╚═╝╚══════╝╚══════╝╚══════╝╚══════╝
+#
+###############################################################################################################
+
+
+class RowObject:
+    def __init__(self, **kwargs):
+        for key, value in kwargs.items():
+            setattr(self, key, value)
 
 
 ###############################################################################################################
@@ -62,7 +83,8 @@ def connect_database(database_secrets_file):
             port=int(
                 secret.get("DB_PORT", 3306)
             ),  # Get the port from secrets, default to 3306 if not provided
-            charset="utf8",  # Set the character set to UTF-8
+            charset="utf8",  # Set the character set to UTF-8,
+            cursorclass=pymysql.cursors.DictCursor,
         )
         return mysql_conn
 
@@ -141,13 +163,35 @@ def send_discord(message, verbosity=False):
 
 
 def route_record(row, priorentry):
-    system, x, y, z, entryid = row
-    if entryid != priorentry:
+    global file
+    print(f"{row.entryid} {priorentry}")
+    # If we have a new entry
+    if row.entryid != priorentry:
+        # we did not have an open file at this point
         if priorentry is not None:
-            print("Upload batch")
+            file.close()
+        print("close previous file handle")
+        print("Upload previous batch")
 
-        print("Starting new batch")
-        print(f"{system},{x},{y},{z},{entryid}")
+        print(f"Starting new batch {row.hud_category}/{row.entryid}")
+        file = open(os.path.join("dumps", f"{row.entryid}.csv"), "w")
+    file.write(f"{row.system},{row.x},{row.y},{row.z},{row.entryid}\n")
+
+
+"""
+    _______       _      __  
+   / ____(_)___  (_)____/ /_ 
+  / /_  / / __ \/ / ___/ __ \
+ / __/ / / / / / (__  ) / / /
+/_/   /_/_/ /_/_/____/_/ /_/ 
+
+
+"""
+
+
+def finish(row):
+    file.close()
+    send_discord("Dumpr complete")
 
 
 """                                                         __         
@@ -164,21 +208,21 @@ def process_codex(db, store, webhooks, keywords):
     try:
         cursor = db.cursor()
         sqltext = """
-            select c.system,x,y,z,c.entryid from codex_systems c 
+            select c.system,x,y,z,c.entryid,cnr.hud_category from codex_systems c 
             join codex_name_ref cnr on c.entryid = cnr.entryid
             order by cnr.hud_category,c.entryid
         """
 
         sqltext_where = """
-            select c.system,x,y,z,c.entryid from codex_systems c
+            select c.system,x,y,z,c.entryid,cnr.hud_category from codex_systems c
             join codex_name_ref cnr on c.entryid = cnr.entryid
-            where cnr.english_name like '%%%s%%'
+            where cnr.english_name like %s order by cnr.hud_category,c.entryid
         """
 
         prior_entry = None
 
         if keywords is not None:
-            cursor.execute(sqltext_where, (keywords))
+            cursor.execute(sqltext_where, ("%" + keywords + "%"))
         else:
             cursor.execute(sqltext)
         while True:
@@ -186,11 +230,12 @@ def process_codex(db, store, webhooks, keywords):
             if not rows:
                 break
             # Processing the fetched rows
-            for row in rows:
-                system, x, y, z, entryid = row
+            for row_dict in rows:
+                row = RowObject(**row_dict)
                 route_record(row, prior_entry)
-                prior_entry = entryid
-
+                prior_entry = row.entryid
+            # finish processeing and upload the final dump
+        finish(row)
         # Closing cursor and connection
         cursor.close()
         db.close()
@@ -213,26 +258,25 @@ def process_codex(db, store, webhooks, keywords):
 
 
 def main(
-    entryid=None,
     storage_secrets_file=None,
     database_secrets_file=None,
     discord_secrets_file=None,
     codex_keywords=None,
 ):
     global webhooks
+    global store
+
     send_discord("Starting dumpr")
+    print("Codex Keywords:", codex_keywords)
     db = connect_database(database_secrets_file)
     store = connect_storage(storage_secrets_file)
     webhooks = load_webhooks(discord_secrets_file)
     process_codex(db, store, webhooks, codex_keywords)
-
-    print("Codex Keywords:", codex_keywords)
     send_discord("Successful Dumpr")
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Process optional parameters.")
-    parser.add_argument("-e", "--entryid", help="Entry ID", default=None)
     parser.add_argument(
         "-s",
         "--storage_secrets",
@@ -255,7 +299,6 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     main(
-        args.entryid,
         args.storage_secrets,
         args.database_secrets,
         args.discord_secrets,
