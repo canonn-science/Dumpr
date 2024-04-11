@@ -4,8 +4,6 @@ import argparse
 import json
 import pymysql
 from google.oauth2 import service_account
-from googleapiclient import discovery
-from google.cloud import storage
 import os
 import requests
 
@@ -182,7 +180,7 @@ This uploads a file to google cloud storage and makes it publicly accessible
 """
 
 
-def upload_entry(cnr):
+def upload_entry(cnr, rowcount):
     global store
 
     """Uploads a file to Google Cloud Storage."""
@@ -191,7 +189,7 @@ def upload_entry(cnr):
     blob.upload_from_filename(os.path.join("dumps", f"{cnr.entryid}.csv"))
     blob.make_public()
     send_discord(
-        f"Uploaded {cnr.english_name} [{cnr.entryid}.csv](<https://storage.googleapis.com/canonn-downloads/dumpr/{cnr.hud_category}/{cnr.entryid}.csv>)"
+        f"Uploaded {cnr.english_name} [{cnr.entryid}.csv](<https://storage.googleapis.com/canonn-downloads/dumpr/{cnr.hud_category}/{cnr.entryid}.csv>) ({rowcount:,} rows)"
     )
 
 
@@ -263,7 +261,7 @@ def process_codex(db, entry):
         file.close()
 
         if rowcount > 0:
-            upload_entry(cnr)
+            upload_entry(cnr, rowcount)
         else:
             send_discord(f"No data found for  {cnr.english_name} ({cnr.entryid})")
 
