@@ -22,7 +22,7 @@ Optional: A webhook for discord updates
 
 if called with no parameters dumpr will extract and upload all of the dumps
 
--c You can supply a list of search keywords that will be used to identify which entryids to extract e.g. "Stratum,Pod,Yellow" Would extract all entries with Yellow in the name All with Pod in teh name and All Stratum.
+-c You can supply a keyword that will be used to identify which entryids to extract e.g. "Yellow" Would extract all entries with Yellow in the name.
 
 -d database_secrets is a file containing details of the database connection. If not supplied it will look in the local directory for a file called [database_secrets.json](database_secrets.md)
 
@@ -36,7 +36,6 @@ if called with no parameters dumpr will extract and upload all of the dumps
 | Column Name | Description |
 | ------------------ |-----------------------------------------------------------------------|
 | System Name | This is the system name |
-| id64 | This is the frontier id for the system which can be used to id the system if the name changes. |
 | X | The galactic X coordinate |
 | Y | Like X but Y |
 | Z | You get the picture |
