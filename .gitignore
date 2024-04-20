@@ -163,3 +163,4 @@ database_secrets.json
 discord_secrets.json
 storage_secrets.json
 *.csv
+hyperdictions.json

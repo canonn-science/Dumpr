@@ -53,7 +53,7 @@ class RowObject:
 #  ██╔══╝  ██║   ██║██║╚██╗██║██║        ██║   ██║██║   ██║██║╚██╗██║╚════██║
 #  ██║     ╚██████╔╝██║ ╚████║╚██████╗   ██║   ██║╚██████╔╝██║ ╚████║███████║
 #  ╚═╝      ╚═════╝ ╚═╝  ╚═══╝ ╚═════╝   ╚═╝   ╚═╝ ╚═════╝ ╚═╝  ╚═══╝╚══════╝
-#
+#  https://manytools.org/hacker-tools/ascii-banner/
 ###############################################################################################################
 
 
@@ -283,14 +283,20 @@ def process_codex(db, entry):
 
 def upload_hyperdictions(rowcount):
     global store
+    cache_control = "max-age=3600, must-revalidate"
+    filename = "hyperdictions.json"
 
     """Uploads a file to Google Cloud Storage."""
-    blob = store.blob(f"dumpr/hyperdictions.csv")
+    blob = store.blob(f"dumpr/{filename}")
+    blob.cache_control = cache_control
     # Upload the file
-    blob.upload_from_filename(os.path.join("dumps", f"hyperdictions.csv"))
+    content_type = "application/json"
+    blob.upload_from_filename(
+        os.path.join("dumps", filename), content_type=content_type
+    )
     blob.make_public()
     send_discord(
-        f"Uploaded [hyperdictions.csv](<https://storage.googleapis.com/canonn-downloads/dumpr/hyperdictions.csv>) ({rowcount:,} rows)"
+        f"Uploaded [{filename}](<https://storage.googleapis.com/canonn-downloads/dumpr/{filename}>) ({rowcount:,} rows)"
     )
 
 
@@ -323,17 +329,11 @@ def process_hyperdictions(db):
         """
         cursor.execute(sqltext, ())
 
-        file = open(os.path.join("dumps", f"hyperdictions.csv"), "w")
+        file = open(os.path.join("dumps", f"hyperdictions.json"), "w")
 
-        while True:
-            rows = cursor.fetchmany(1000)
-            if not rows:
-                break
-            # Processing the fetched rows
-            for row_dict in rows:
-                row = RowObject(**row_dict)
-                rowcount += 1
-                file.write(f"{row.system},{row.year},{row.x},{row.y},{row.z}\n")
+        rows = cursor.fetchall()
+        rowcount = cursor.rowcount
+        file.write(json.dumps(rows))
 
         # Closing cursor and connection
         cursor.close()
@@ -346,7 +346,7 @@ def process_hyperdictions(db):
 
     except pymysql.Error as e:
         print(f"Error: {e}")
-        send_discord(f"Dumpr query failed hyperdictions.csv", VERBOSE)
+        send_discord(f"Dumpr query failed hyperdictions.json", VERBOSE)
 
 
 ###############################################################################################################
