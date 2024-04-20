@@ -271,6 +271,64 @@ def process_codex(db, entry):
         send_discord(f"Dumpr query failed {cnr.english_name}", VERBOSE)
 
 
+def upload_hyperdictions(rowcount):
+    global store
+
+    """Uploads a file to Google Cloud Storage."""
+    blob = store.blob(f"dumpr/hyperdictions.csv")
+    # Upload the file
+    blob.upload_from_filename(os.path.join("dumps", f"hyperdictions.csv"))
+    blob.make_public()
+    send_discord(
+        f"Uploaded [hyperdictions.csv](<https://storage.googleapis.com/canonn-downloads/dumpr/hyperdictions.csv>) ({rowcount:,} rows)"
+    )
+
+
+def process_hyperdictions(db):
+    rowcount = 0
+    try:
+        cursor = db.cursor()
+        # would it be better to run seperate selects instead of unioning in the database
+        sqltext = """
+            select distinct system,year+1286 as year,cast(x as char) x,cast(y as char) y,cast(z as char) z
+            from (
+            SELECT system, YEAR(TIMESTAMP) as year,x,y,z FROM hd_detected GROUP BY system,YEAR(TIMESTAMP),x,y,z
+            union 
+            SELECT system, YEAR(TIMESTAMP) as year,x,y,z FROM hd_monitor GROUP BY system,YEAR(TIMESTAMP),x,y,z
+            union 
+            select systemName as system ,YEAR(eddatetime) as year,x,y,z from hdreports where eddatetime != '0000-00-00 00:00:00' group by systemName,YEAR(eddatetime),x,y,z
+            ) data
+            where  year > 2017
+            order by year desc
+        """
+        cursor.execute(sqltext, ())
+
+        file = open(os.path.join("dumps", f"hyperdictions.csv"), "w")
+
+        while True:
+            rows = cursor.fetchmany(1000)
+            if not rows:
+                break
+            # Processing the fetched rows
+            for row_dict in rows:
+                row = RowObject(**row_dict)
+                rowcount += 1
+                file.write(f"{row.system},{row.year}{row.x},{row.y},{row.z}\n")
+
+        # Closing cursor and connection
+        cursor.close()
+        file.close()
+
+        if rowcount > 0:
+            upload_hyperdictions(rowcount)
+        else:
+            send_discord(f"No data found for Hyperdictions")
+
+    except pymysql.Error as e:
+        print(f"Error: {e}")
+        send_discord(f"Dumpr query failed hyperdictions.csv", VERBOSE)
+
+
 ###############################################################################################################
 #
 #  ███╗   ███╗ █████╗ ██╗███╗   ██╗
@@ -288,6 +346,7 @@ def main(
     database_secrets_file=None,
     discord_secrets_file=None,
     codex_keywords=None,
+    hyperdictions=None,
 ):
     global webhooks
     global store
@@ -301,10 +360,20 @@ def main(
     db = connect_database(database_secrets_file)
     store = connect_storage(storage_secrets_file)
 
-    # Getting a sorted list of codex entries
-    entries = get_codex_list(db, store, webhooks, codex_keywords)
-    for entry in entries:
-        process_codex(db, entry)
+    modifiers = hyperdictions or codex_keywords
+
+    # if we have keywords or all modifiers are missing
+    # then we can dummp codex items
+    if codex_keywords is not None or not modifiers:
+        # Getting a sorted list of codex entries
+        entries = get_codex_list(db, store, webhooks, codex_keywords)
+        for entry in entries:
+            process_codex(db, entry)
+
+    # if -hd is set or all modifiers are missing
+    # then we can dump hyperdiction items
+    if hyperdictions or not modifiers:
+        process_hyperdictions(db)
 
     send_discord("Successful Dumpr", VERBOSE)
 
@@ -329,7 +398,16 @@ if __name__ == "__main__":
         help="Discord Secrets File",
         default="discord_secrets.json",
     )
-    parser.add_argument("-c", "--codex_keywords", help="Codex Keywords", default=None)
+    parser.add_argument(
+        "-c",
+        "--codex_keywords",
+        help="Codex Keywords, only load matching entries",
+        default=None,
+    )
+    parser.add_argument(
+        "-hd", "--hyperdictions", action="store_true", help="dump hyperdiction data"
+    )
+
     args = parser.parse_args()
 
     main(
@@ -337,4 +415,5 @@ if __name__ == "__main__":
         args.database_secrets,
         args.discord_secrets,
         args.codex_keywords,
+        args.hyperdictions,
     )
