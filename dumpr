@@ -214,7 +214,7 @@ def get_codex_list(db, store, webhooks, keywords):
     where = ""
     if keywords is not None:
         where = "where english_name like %s"
-    sqltext = f"select entryid,hud_category,english_name from codex_name_ref cnr {where} order by hud_category,entryid"
+    sqltext = f"select entryid,hud_category,english_name,name from codex_name_ref cnr {where} order by hud_category,entryid"
     if keywords is not None:
         cursor.execute(sqltext, ("%" + keywords + "%"))
     else:
@@ -243,7 +243,20 @@ def process_codex(db, entry):
             select c.system,x,y,z from codex_systems c 
             where entryid = %s
         """
-        cursor.execute(sqltext, (cnr.entryid))
+        params = cnr.entryid
+
+        if cnr.hud_category == "Biology":
+            print(f"including organic scans {cnr.english_name}")
+            sqltext = """
+                select c.system,x,y,z from codex_systems c 
+                where entryid = %s
+                union 
+                select distinct os.system,x,y,z from organic_scans os
+                where variant = %s 
+            """
+            params = (cnr.entryid, cnr.name)
+
+        cursor.execute(sqltext, params)
 
         file = open(os.path.join("dumps", f"{cnr.entryid}.csv"), "w")
 
