@@ -7,6 +7,7 @@ from google.oauth2 import service_account
 from google.cloud import storage
 import os
 import requests
+import traceback
 
 ###############################################################################################################
 #
@@ -184,14 +185,19 @@ This uploads a file to google cloud storage and makes it publicly accessible
 def upload_entry(cnr, rowcount):
     global store
 
-    """Uploads a file to Google Cloud Storage."""
-    blob = store.blob(f"dumpr/{cnr.hud_category}/{cnr.entryid}.csv")
-    # Upload the file
-    blob.upload_from_filename(os.path.join("dumps", f"{cnr.entryid}.csv"))
-    blob.make_public()
-    send_discord(
-        f"Uploaded {cnr.english_name} [{cnr.entryid}.csv](<https://storage.googleapis.com/canonn-downloads/dumpr/{cnr.hud_category}/{cnr.entryid}.csv>) ({rowcount:,} rows)"
-    )
+    try:
+        """Uploads a file to Google Cloud Storage."""
+        blob = store.blob(f"dumpr/{cnr.hud_category}/{cnr.entryid}.csv")
+        # Upload the file
+        blob.upload_from_filename(os.path.join("dumps", f"{cnr.entryid}.csv"))
+        blob.make_public()
+        send_discord(
+            f"Uploaded {cnr.english_name} [{cnr.entryid}.csv](<https://storage.googleapis.com/canonn-downloads/dumpr/{cnr.hud_category}/{cnr.entryid}.csv>) ({rowcount:,} rows)"
+        )
+    except Exception as e:
+        send_discord(f"Error uploading {cnr.english_name} ({rowcount:,} rows)")
+        stack_trace = traceback.format_exc()
+        print(stack_trace)
 
 
 """
