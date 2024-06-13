@@ -341,7 +341,7 @@ def process_hyperdictions(db):
             union 
             SELECT `system`, YEAR(TIMESTAMP) as year,x,y,z FROM hd_monitor GROUP BY `system`,YEAR(TIMESTAMP),x,y,z
             union 
-            select systemName as `system` ,YEAR(eddatetime) as year,x,y,z from hdreports where eddatetime != '0000-00-00 00:00:00' group by systemName,YEAR(eddatetime),x,y,z
+            select systemName as `system` ,YEAR(eddatetime) as year,x,y,z from hdreports where eddatetime is not null group by systemName,YEAR(eddatetime),x,y,z
             ) data
             where  year > 2017
             order by year desc
