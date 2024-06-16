@@ -247,18 +247,21 @@ def process_codex(db, entry):
         cursor = db.cursor()
         sqltext = """
             select c.system,x,y,z from codex_systems c 
-            where entryid = %s
+            where entryid = %s order by rand()
         """
         params = cnr.entryid
 
         if cnr.hud_category == "Biology":
             print(f"including organic scans {cnr.english_name}")
             sqltext = """
-                select c.system,x,y,z from codex_systems c 
-                where entryid = %s
+                select * from (
+                select c.system,x,y,z,min(reported_at) as reported_at from codexreport c 
+                where entryid = %s 
+                group by c.system,x,y,z
                 union 
-                select distinct os.system,x,y,z from organic_scans os
-                where variant = %s 
+                select distinct os.system,x,y,z,reported_at from organic_scans os
+                where variant = %s  
+                ) data order by reported_at
             """
             params = (cnr.entryid, cnr.name)
 
