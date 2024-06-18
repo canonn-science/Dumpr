@@ -8,6 +8,13 @@ from google.cloud import storage
 import os
 import requests
 import traceback
+import sys
+
+# add regionmap to the path
+sys.path.append("RegionMap")
+
+from RegionMap import findRegion, findRegionForBoxel
+
 
 ###############################################################################################################
 #
@@ -254,14 +261,24 @@ def process_codex(db, entry):
         if cnr.hud_category == "Biology":
             print(f"including organic scans {cnr.english_name}")
             sqltext = """
-                select * from (
-                select c.system,x,y,z,min(reported_at) as reported_at from codexreport c 
-                where entryid = %s 
-                group by c.system,x,y,z
-                union 
-                select distinct os.system,x,y,z,reported_at from organic_scans os
-                where variant = %s  
-                ) data order by reported_at
+                select 
+                    ifnull(ss.name,data.system) as `system`, 
+                    ifnull(ss.x,data.x) as `x`,
+                    ifnull(ss.y,data.y) as `y`,
+                    ifnull(ss.z,data.z) as `z`,
+                    reported_at,
+                    data.system_address
+                from (
+                    select c.system,x,y,z,min(reported_at) as reported_at,id64 as system_address from codexreport c
+                    where entryid = %s 
+                    group by c.system,x,y,z,id64
+                    union 
+                    select os.system,x,y,z,min(reported_at),systemAddress as system_address from organic_scans os
+                    where variant = %s  
+                    group by os.system,x,y,z,systemAddress
+                ) data 
+                left join star_systems ss on ss.id64 = data.system_address
+                order by reported_at
             """
             params = (cnr.entryid, cnr.name)
 
@@ -277,7 +294,17 @@ def process_codex(db, entry):
             for row_dict in rows:
                 row = RowObject(**row_dict)
                 rowcount += 1
-                file.write(f"{row.system},{row.x},{row.y},{row.z},{cnr.entryid}\n")
+                coordRegion = findRegion(row.x, row.y, row.z)
+                boxelRegion = findRegionForBoxel(int(row.system_address))
+
+                if coordRegion[0] != boxelRegion.get("region")[0]:
+                    print(
+                        f"regions mismatch {coordRegion[1]} {boxelRegion.get('region')[1]}"
+                    )
+
+                file.write(
+                    f"{row.system},{row.x},{row.y},{row.z},{cnr.entryid},{row.system_address},{coordRegion[1]},{boxelRegion.get('region')[1]}\n"
+                )
 
         # Closing cursor and connection
         cursor.close()
