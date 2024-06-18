@@ -55,7 +55,7 @@ We do not supply the names of the items in the files. You are expected to look t
 Region Numbers to names can be fond in the [elite wiki](https://elite-dangerous.fandom.com/wiki/Galactic_regions)
 
 ### A note about regions
-Extensive testing of region names reported in the CodexEntry event show that these are calculated using the boxel coordinates from teh id64 not the galactic x,y,z coorinates. However Region spawn boundaries appear to be based on the x,y,z coordinates. Consequently the region names reported by the CodexEntry eventcan be misleading when it comes to making predictions about what regions the entries will spawn in. The dump supplies both regions. If the two region numbers are not identical then the codex entry is on the region boundary and the data should not be used to predict location.
+Extensive testing of region names reported in the CodexEntry event show that these are calculated using the boxel coordinates from the id64 not the galactic x,y,z coordinates. However Region spawn boundaries appear to be based on the x,y,z coordinates. Consequently the region names reported by the CodexEntry event can be misleading when it comes to making predictions about what regions the entries will spawn in. The dump supplies both regions. If the two region numbers are not identical then the codex entry is on the region boundary and the data should not be used to predict location.
 
 ## Hyperdictions
 
