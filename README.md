@@ -10,6 +10,10 @@ The dumpr will be updated daily.
 
 The storage bucket is cors enabled so the files can be accessed directly from another website.
 
+## Credits
+
+RegionMap submodule by Bravada Cadelanne [EliteDangerousRegionMap](https://github.com/klightspeed/EliteDangerousRegionMap)
+
 # Prerequisites
 
 A mysql database containing the source data
@@ -43,8 +47,15 @@ if called with no parameters dumpr will extract and upload all of the dumps
 | Y | Like X but Y |
 | Z | You get the picture |
 | entryid | This is the unique identifier for the codex item |
+| coordRegion | This is the region calculated using the x,y,x coordinates |
+| boxelRegion | This is the region calculated using the boxel coordinates. This should match the region recorded in CodexEntry |
 
-We do not supply the names of the items in the files. You are expected to look them up in a reference table. You can find the reference data [here](https://us-central1-canonn-api-236217.cloudfunctions.net/query/codex/ref)
+We do not supply the names of the items in the files. You are expected to look them up in a reference table. You can find the reference data for codex entries [here](https://us-central1-canonn-api-236217.cloudfunctions.net/query/codex/ref)
+
+Region Numbers to names can be fond in the [elite wiki](https://elite-dangerous.fandom.com/wiki/Galactic_regions)
+
+### A note about regions
+Extensive testing of region names reported in the CodexEntry event show that these are calculated using the boxel coordinates from teh id64 not the galactic x,y,z coorinates. However Region spawn boundaries appear to be based on the x,y,z coordinates. Consequently the region names reported by the CodexEntry eventcan be misleading when it comes to making predictions about what regions the entries will spawn in. The dump supplies both regions. If the two region numbers are not identical then the codex entry is on the region boundary and the data should not be used to predict location.
 
 ## Hyperdictions
 
